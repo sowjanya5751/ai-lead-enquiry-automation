@@ -217,7 +217,7 @@ The design emphasizes traceable lead records, structured AI output, input valida
 
 ## 16. Portfolio Deliverables
 
-- `ai-lead-enquiry-automation.json` — sanitized n8n workflow template.
+- `AI_Lead_Enquiry_Automation_GitHub_Template.json` — sanitized n8n workflow template.
 - `README.md` — project documentation.
 - Workflow overview screenshot.
 - Google Sheets lead tracker screenshot.
