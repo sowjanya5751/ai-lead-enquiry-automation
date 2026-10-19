@@ -6,7 +6,7 @@ An AI-powered lead management and workflow automation project built using n8n Cl
 
 The AI Lead & Enquiry Workflow Automation system helps small businesses and service-based organizations manage incoming customer enquiries more efficiently.
 
-The workflow captures lead details through a form, validates the submitted information, creates a unique lead ID, stores the lead in Google Sheets, and uses AI to classify the enquiry, assess its priority, identify missing information, and draft a professional response for human review.
+The workflow captures lead details through a form, validates the submitted information, generates a unique lead ID, stores the original enquiry in Google Sheets, and uses AI to classify the enquiry, assess its priority, identify missing information, and draft a professional response for human review.
 
 The system combines workflow automation with AI-assisted decision support while keeping customer communication under human control.
 
@@ -14,20 +14,23 @@ The system combines workflow automation with AI-assisted decision support while 
 
 Businesses often receive customer enquiries that require manual review, categorization, prioritization, and follow-up. Handling these tasks manually can lead to delayed responses, disorganized customer information, difficulty identifying urgent enquiries, inconsistent follow-up messages, and time spent repeatedly reviewing similar enquiries.
 
+This project demonstrates how workflow automation and AI-assisted classification can reduce repetitive administrative work while retaining human oversight.
+
 ## 3. Project Objectives
 
 - Capture customer enquiries through a form.
 - Validate required fields and email addresses.
 - Normalize submitted information.
 - Generate a unique lead ID and timestamp.
-- Save original lead information in Google Sheets.
+- Save original lead information in Google Sheets before AI processing.
 - Classify enquiries using predefined categories.
 - Assign an appropriate priority and explain the decision.
 - Identify missing customer information.
 - Generate professional reply drafts.
 - Flag enquiries that require human review.
-- Update existing lead records instead of creating duplicate records.
-- Handle invalid input and AI-processing failures safely.
+- Update existing lead records using `lead_id`.
+- Handle invalid input and AI-processing failures through separate workflow paths.
+- Validate AI output before updating the lead record.
 
 ## 4. Technology Stack
 
@@ -42,38 +45,49 @@ Businesses often receive customer enquiries that require manual review, categori
 
 ## 5. Workflow Architecture
 
-1. **On form submission:** Receives customer information.
-2. **Validate and Normalize Input:** Checks required fields, validates email format, removes unnecessary whitespace, and rejects messages exceeding 3,000 characters.
-3. **Is Input Valid?:** Routes valid and invalid submissions.
-4. **Create Lead ID and Timestamp:** Creates tracking information for the lead.
-5. **Phase 3 Placeholder - Lead Saved:** Intended to save the original lead record before AI processing.
-6. **Basic LLM Chain and Gemini Model:** Process the enquiry using the connected AI model.
-7. **Structured Output Parser:** Specifies the expected response structure.
-8. **Validate AI Output:** Checks categories, priority values, required fields, and data types.
-9. **AI Output Valid?:** Routes valid and invalid AI results.
-10. **Google Sheets Update Row:** Writes valid AI results to the corresponding existing lead record.
-11. **Handle AI Validation Failure:** Handles invalid AI output.
-12. **AI Model Error Handling:** Routes AI model failures to a separate handling path.
+The workflow is organized into the following stages:
 
-The intended design saves the original lead before AI processing and updates the same row using `lead_id`.
+1. **On form submission:** Receives customer information.
+2. **Validate and Normalize Input:** Checks required fields, validates email format, normalizes whitespace, and rejects messages exceeding 3,000 characters.
+3. **Is Input Valid:** Routes valid submissions toward processing and invalid submissions to a validation-failure path.
+4. **Create Lead ID and Timestamp:** Generates lead-tracking information.
+5. **Save Initial Lead to Lead Tracker:** Appends the original enquiry to Google Sheets before AI processing.
+6. **Basic LLM Chain and Gemini Model:** Analyze the enquiry using the configured AI model.
+7. **Structured Output Parser:** Defines the expected structure of the AI response.
+8. **Validate AI Output:** Checks the AI-generated fields, permitted category and priority values, and required data types.
+9. **AI Output Valid?:** Routes validated results toward the successful update path and invalid results toward manual-review handling.
+10. **Update Lead with AI Classification:** Updates the existing lead record with classification, priority, explanation, missing information, reply draft, and review status.
+11. **Handle AI Validation Failure:** Prepares invalid AI results for manual review.
+12. **Update Lead - AI Error or Manual Review:** Provides a Google Sheets update path for AI-processing errors and handled validation failures.
+
+The intended design saves the original enquiry first and updates the same row using `lead_id`. The error-handling paths must be tested end to end before the workflow is considered production-ready.
 
 ## 6. Form Inputs
 
-The enquiry form collects Name, Email, Service, and Message.
+The enquiry form collects:
 
-The workflow also records a lead ID, timestamp, source, AI-generated classification, priority, priority explanation, missing information, reply draft, processing status, review status, human-review flag, and error note.
+- Name
+- Email
+- Service
+- Message
+
+The workflow also tracks the lead ID, creation timestamp, source, AI-generated classification, priority, priority explanation, missing information, reply draft, processing status, review status, human-review flag, and error note.
 
 ## 7. Google Sheets Database
 
-The spreadsheet is named **AI Lead Tracker**, with a worksheet named `Leads`.
+The workflow is designed to use a Google spreadsheet named **Lead Tracker**, with a worksheet named `Leads`.
 
 The worksheet contains these 16 columns:
 
 `lead_id, created_at, source, name, email, service, original_message, category, priority, priority_reason, missing_information, reply_draft, processing_status, review_status, needs_human_review, error_note`
 
+The initial save operation appends a new lead record. Subsequent processing is intended to update the corresponding record by matching `lead_id`, avoiding duplicate rows during normal processing.
+
 ## 8. AI Classification Logic
 
 ### Enquiry categories
+
+The AI classifies enquiries into one of seven categories:
 
 - Pricing
 - Service Inquiry
@@ -85,41 +99,60 @@ The worksheet contains these 16 columns:
 
 ### Priority levels
 
-- **High:** Explicit urgent deadline, serious unresolved complaint, or another clearly urgent business issue.
-- **Medium:** Clear service enquiry, pricing request, or consultation request without an explicit urgent deadline.
-- **Low:** General information request, vague enquiry, or non-urgent message.
+- **High:** An explicit urgent deadline, a serious unresolved complaint, or another clearly urgent business issue.
+- **Medium:** Clear interest in a service, a pricing request, or a consultation request without an explicit urgent deadline.
+- **Low:** A general information request, vague enquiry, or non-urgent message.
 
-The AI also generates a priority explanation, identifies missing information, drafts a professional response, and determines whether human review is needed.
+The AI also generates a priority explanation, identifies missing information, drafts a professional response, and determines whether human review is required.
+
+Customer-provided instructions that attempt to manipulate classification or override the AI's rules are treated as untrusted input. Such attempts should trigger the human-review flag.
 
 ## 9. Human-in-the-Loop Design
+
+Human oversight is built into the workflow:
 
 - AI-generated replies remain drafts.
 - No automatic customer email or message is sent.
 - Ambiguous enquiries can be flagged for review.
 - High-priority enquiries can receive a dedicated review status.
-- AI output is validated before being written to the lead record.
+- AI output is validated before the successful classification update.
 - Original enquiry information is retained for reference.
 - Processing failures should be recorded without inventing AI-generated results.
+- Human review is required when classification is uncertain or processing fails.
 
 ## 10. Validation and Error Handling
 
 ### Input validation
 
-The workflow checks required name, email, service, and message fields; email format; and messages exceeding 3,000 characters.
+The workflow checks that the name, email, service, and message fields are populated. It validates email format, normalizes whitespace, and rejects messages exceeding 3,000 characters.
+
+Invalid submissions are routed to the validation-failure path rather than continuing through normal lead processing.
 
 ### AI-output validation
 
-The workflow checks whether the output is an object, whether the category and priority are permitted, whether the priority explanation and reply draft are valid strings, whether missing information is an array of valid strings, and whether `needs_human_review` is a Boolean.
+The validation logic checks:
+
+- The AI output is an object.
+- The category belongs to the permitted category list.
+- The priority is `High`, `Medium`, or `Low`.
+- `priority_reason` is a valid, non-empty string.
+- `missing_information` is an array containing valid strings.
+- `reply_draft` is a valid, non-empty string.
+- `needs_human_review` is a Boolean.
+
+Invalid AI output is routed toward manual-review handling rather than the successful classification update.
 
 ### AI model failures
 
-The AI chain is configured to provide an error output when model processing fails. A separate Google Sheets Update Row node is intended to mark the existing lead for manual review.
+The workflow template includes a separate AI error-handling route intended to update the existing lead record with an error status and manual-review information.
 
-**Verification note:** An invalid Gemini API key produced an AI error during testing. The final end-to-end update of the existing Google Sheets row with the AI error status still requires confirmation.
+**Verification status:** An invalid Gemini API key previously produced an AI-processing error during testing. The complete error-to-Google-Sheets update must still be confirmed in a separate test workflow. The existence of an error branch alone does not prove that the correct existing row is updated successfully.
 
 ## 11. Testing Summary
 
-| Test | Observed result |
+The following results have been reported from workflow testing:
+
+| Test | Observed result / status |
 |---|---|
 | Valid enquiry | Lead capture and processing tested |
 | Invalid email | Input validation rejected the format |
@@ -127,27 +160,33 @@ The AI chain is configured to provide an error output when model processing fail
 | Urgent enquiry | High-priority classification and priority review observed |
 | Prompt-injection attempt | Workflow executed and the enquiry was flagged for review |
 | Multiple lead submissions | Separate lead records were created and updated |
-| Invalid Gemini API key | AI model error was produced and the error branch was available |
+| Invalid Gemini API key | AI model error was produced |
+| AI error to Google Sheets update | End-to-end confirmation still required |
+| Correct AI prompt inputs for every execution | Final verification required |
 
-The AI error-to-Google-Sheets update remains an outstanding verification item. Final testing should also confirm that the AI prompt receives the correct form data in every execution.
+These results describe the reported tests, not a guarantee that every path in the sanitized template has been independently re-executed. Refer to `TEST_REPORT.md` for the detailed test record.
 
 ## 12. Setup Instructions
 
-1. Create an n8n Cloud account.
-2. Create a Google spreadsheet named `AI Lead Tracker`.
-3. Create a worksheet named `Leads` and add the 16 column headers listed above.
-4. Configure Google Sheets credentials in n8n.
-5. Configure a valid Google Gemini credential.
-6. Import the exported n8n workflow JSON.
-7. Reconnect credentials as required.
-8. Verify the form field names and AI prompt mappings.
-9. Confirm that the initial lead row is saved before AI processing.
-10. Verify Google Sheets row matching using `lead_id`.
-11. Test successful enquiries, invalid inputs, AI-output validation, and AI model failures.
-12. Confirm that error-handling paths update the correct existing row.
-13. Verify that the workflow does not send customer replies automatically.
+The public workflow JSON is a sanitized template. It is not intended to run immediately after import without configuration.
 
-Node labels and available options may vary between n8n versions.
+1. Create an n8n Cloud account.
+2. Create a Google spreadsheet named `Lead Tracker`.
+3. Create a worksheet named `Leads`.
+4. Add the 16 column headers listed in Section 7.
+5. Import `ai-lead-enquiry-automation.json` into a separate test workflow.
+6. Configure your own Google Sheets credentials.
+7. Configure your own Google Gemini credentials.
+8. Select your spreadsheet and `Leads` worksheet in the relevant Google Sheets nodes.
+9. Verify all Google Sheets column mappings and `lead_id` matching.
+10. Confirm that the initial lead record is saved before AI processing.
+11. Verify that the AI prompt receives the correct name, email, service, and message from the submitted form.
+12. Test valid enquiries, invalid inputs, AI-output validation failures, and AI model errors.
+13. Confirm that error-handling paths update the correct existing row.
+14. Keep the workflow inactive until configuration and testing are complete.
+15. Verify that the workflow does not send customer replies automatically.
+
+Node labels and available options may vary between n8n versions. Credentials and spreadsheet configuration must be supplied by the person importing the template.
 
 ## 13. Known Limitations
 
@@ -155,9 +194,10 @@ Node labels and available options may vary between n8n versions.
 - AI-generated classifications may require correction.
 - Reply drafts require human approval.
 - AI model availability and API limits can affect processing.
-- The final AI-error-to-Google-Sheets update needs end-to-end verification.
-- Form-field mappings and AI inputs must be verified before the workflow is considered production-ready.
-- Credentials must be configured separately when the workflow is imported.
+- The AI error-to-Google-Sheets update requires end-to-end verification.
+- Form-field mappings and AI inputs must be verified before production use.
+- The sanitized workflow requires the user's own credentials and spreadsheet configuration.
+- The included invalid-email test node is intended for testing, not normal customer submissions.
 
 ## 14. Future Enhancements
 
@@ -173,19 +213,23 @@ Node labels and available options may vary between n8n versions.
 
 This project demonstrates how AI-assisted workflow automation can help businesses organize incoming enquiries, reduce repetitive administrative tasks, identify potentially urgent requests, and prepare consistent reply drafts.
 
+The design emphasizes traceable lead records, structured AI output, input validation, and human oversight rather than fully autonomous customer communication.
+
 ## 16. Portfolio Deliverables
 
-- `ai-lead-enquiry-automation.json` — exported n8n workflow.
+- `ai-lead-enquiry-automation.json` — sanitized n8n workflow template.
 - `README.md` — project documentation.
 - Workflow overview screenshot.
 - Google Sheets lead tracker screenshot.
 - AI classification screenshot.
-- AI error-handling screenshot.
-- Test report with expected and actual results.
-- Short project demonstration script.
+- `TEST_REPORT.md` — test cases and reported results.
+
+Additional screenshots or a demonstration video can be added after the corresponding workflow paths have been verified.
 
 ## 17. Conclusion
 
-The AI Lead & Enquiry Workflow Automation project demonstrates practical implementation of workflow orchestration, structured AI output, data validation, Google Sheets integration, and human-in-the-loop processing. It aims to make lead handling more organized and consistent while ensuring that customer communication remains under human control.
+The AI Lead & Enquiry Workflow Automation project demonstrates practical use of workflow orchestration, structured AI output, data validation, Google Sheets integration, and human-in-the-loop processing.
+
+It aims to make lead handling more organized and consistent while keeping customer communication under human control.
 
 **Primary tools:** n8n Cloud, Google Sheets, Google Gemini, JavaScript.
